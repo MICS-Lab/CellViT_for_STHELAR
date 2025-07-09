@@ -1,0 +1,242 @@
+# Example configuration for HoverNet-Cell-Segmentation
+
+#########################################
+## Comment and project setup for wandb ##
+#########################################
+logging:
+  mode: "offline"                    # "online" or "offline" [str]
+  project: "training_2"                 # Name of project to use [str]
+  notes: "training_2"                   # Notes about the run, verbose description [str]
+  log_comment: "training_2"             # Comment to add to name the local logging folder [str]
+  tags:                     # List of tags, e.g., ["baseline", "run1"] [str]
+    - "training_2"
+    - "CellViT-SAM-H-40x"
+  wandb_dir: "/lustre/fswork/projects/rech/bry/ubu16ws/HE2CellType/HE2CT/trainings/training_2"               # Directory to store the wandb file. CAREFUL: Directory must exists [str]
+  log_dir: "/lustre/fswork/projects/rech/bry/ubu16ws/HE2CellType/HE2CT/trainings/training_2/log"                 # Direcotry to store all logging related files and outputs [str]
+  level: "debug"                   # Level of logging must be either ["critical", "error", "warning", "info", "debug"] [str]
+  log_images: True              # If images should be logged to WandB for this run. [bool] [Optional, defaults to False]
+  #group:                    # WandB group tag [str] [Optional, defaults to None]
+
+
+#############
+## Seeding ##
+#############
+random_seed: 19             # Seed for numpy, pytorch etc. [int]
+
+
+##############
+## Hardware ##
+##############
+gpu: 0                       # Number of GPU to run experiment on [int] (or "mps" if mac)
+
+
+###############################
+## Setting paths and dataset ##
+###############################
+data:
+  dataset: "PanNuke"                 # Name of dataset, currently supported: PanNuke, Conic. Select your dataset and the script will automatically select the corresponding experiment [str]
+  dataset_path: "/lustre/fswork/projects/rech/bry/ubu16ws/HE2CellType/HE2CT/training_datasets/ds_2"            # Path to dataset, compare ./docs/readmes/pannuke.md for further details [str]
+  macenko_normalization: False    # If Macenko normalization should be used. [bool] [Optional, defaults to False]
+  train_folds: ['train']        # List of fold str to use for training [list[str]]
+  val_folds: ['valid']               # List of fold str to use for validation [list[str]]
+  test_folds: ['test']              # List of fold str to use for final testing [list[str]]
+  num_nuclei_classes: 10      # Number of different nuclei classes (including background!, e.g. 5 nuclei classes + background = 6) [int]
+  num_tissue_classes: 13      # Number of different tissue classes [int]
+  input_shape: 256             # Input shape of data. [int] [Optional, defaults to 256]
+
+  # Remapping of the original class names to the new class names if cell_cat_id is built from a previous dataset / Comment if not needed
+  # Should be in the following format:
+  # orig_class_names:  # Original class names (index corresponds to type_map value) for the physical dataset
+  #   - "Background"
+  #   - "T_NK"
+  #   - "B_Plasma"
+  #   - "Myeloid"
+  #   - "Blood_vessel"
+  #   - "Fibroblast_Myofibroblast"
+  #   - "Epithelial"
+  #   - "Specialized"
+  #   - "Melanocyte"
+  #   - "Dead"
+  # grouping:  # Mapping group names to list of original names
+  #   Immune:
+  #     - "T_NK"
+  #     - "B_Plasma"
+  #     - "Myeloid"
+  #   Stromal:
+  #     - "Blood_vessel"
+  #     - "Fibroblast_Myofibroblast"
+  # new_class_mapping:  # Mapping new category names to new indices
+  #   Background: 0
+  #   Immune: 1
+  #   Stromal: 2
+  #   Epithelial: 3
+  #   Specialized: 4
+  #   Melanocyte: 5
+  #   Dead: 6
+
+
+###################
+## Model options ##
+###################
+model:
+  backbone: "SAM-H"                # Backbone Type: Options are: default, ViT256, SAM-B, SAM-L, SAM-H
+  pretrained_encoder: "/lustre/fswork/projects/rech/bry/ubu16ws/HE2CellType/HE2CT/trainings/pretrained_models/sam_vit_h.pth"      # Set path to a pretrained encoder [str]
+  pretrained: "/lustre/fswork/projects/rech/bry/ubu16ws/HE2CellType/HE2CT/trainings/pretrained_models/CellViT-SAM-H-x40.pth"              # Path to a pretrained model (.pt or .pth file) [str, default None]
+  embed_dim: 1280               # Embedding dimension for ViT - typical values are 384 (ViT-S), 768 (ViT-B), 1024 (ViT-L), 1280 (ViT-H) [int]
+  input_channels: 3          # Number of input channels, usually 3 for RGB [int, default 3]
+  depth: 32                   # Number of Transformer Blocks to use - typical values are 12 (ViT-S), 12 (ViT-B), 24 (ViT-L), 32 (ViT-H) [int]
+  num_heads: 16               # Number of attention heads for MHA - typical values are 6 (ViT-S), 12 (ViT-B), 16 (ViT-L), 16 (ViT-H) [int]
+  extract_layers: 4          # List of layers to extract for skip connections - starting from 1 with a maximum value equals the depth [int] -> no other choice than 4
+  shared_decoders: False         # If decoder networks should be shared except for the heads. [bool] [Optional, defaults to False] -> True not implemented
+  #regression_loss:          # If regression loss should be used for binary prediction head. [bool] [Optional, defaults to False]
+  shared_skip_connections: True  # If skip connections should be shared between the different decoders. [bool] [Optional, defaults to True] -> False not implemented
+
+
+##########
+## Loss ##
+##########
+# See all implemented loss functions in base_ml.base_loss module
+# The state for each loss can be either "static" or "dynamic". If "static" the weight is fixed and the weight value is used. If "dynamic" the weight is calculated using 1.0 / (loss_value.detach() + 1e-8)
+loss:
+  nuclei_binary_map:
+    focaltverskyloss:
+      loss_fn: FocalTverskyLoss
+      weight: 1.0
+      state: "static"
+    dice:
+      loss_fn: dice_loss
+      weight: 0.5
+      state: "static"
+  hv_map:
+    mse:
+      loss_fn: mse_loss_maps
+      weight: 1.0
+      state: "static"
+    msge:
+      loss_fn: msge_loss_maps
+      weight: 0.41
+      state: "static"
+  nuclei_type_map:
+    bce:
+      loss_fn: xentropy_loss
+      weight: 0.06
+      state: "static"
+      args:
+        class_weights: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0] # put very small weight for ignore cats
+    dice:
+      loss_fn: dice_loss
+      weight: 0.1
+      state: "static"
+      args:
+        class_weights: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0] # put very small weight for ignore cats
+    mcfocaltverskyloss:
+      loss_fn: MCFocalTverskyLoss
+      weight: 0.96
+      state: "static"
+      args:
+        num_classes: 10
+        class_weights: [0.044, 0.086, 0.101, 0.09, 0.106, 0.088, 0.044, 0.194, 0.15, 0.142] # put very small weight for ignore cats
+  tissue_types:
+    ce:
+      loss_fn: CrossEntropyLoss
+      weight: 0.06
+      state: "static"
+
+
+######################
+## Training options ##
+######################
+training:
+  batch_size: 16          # Training Batch size [int]
+  epochs: 100               # Number of Training Epochs to use [int]
+  unfreeze_epoch: 4          # Epoch Number to unfreeze backbone [int] --- big number to not unfreeze  / CAREFUL: in reality (contrary to the print), the epochs start at 0, and the unfreeze epoch is epoch >= unfreeze_epoch using the true epoch (so do -1 to unfreeze at the right epoch)
+  drop_rate: 0               # Dropout rate [float] [Optional, defaults to 0]
+  attn_drop_rate: 0.1          # Dropout rate in attention layer [float] [Optional, defaults to 0] -> not taken into account, always using 0
+  drop_path_rate: 0.1          # Dropout rate in paths [float] [Optional, defaults to 0] -> not taken into account, always using 0
+  optimizer: "AdamW"               # Pytorch Optimizer Name. All pytorch optimizers (v1.13) are supported. [str]
+  optimizer_hyperparameter: # Hyperparamaters for the optimizers, must be named exactly as in the pytorch documation given for the selected optimizer
+    betas: [0.85, 0.95]      # e.g. betas for Adam
+    lr: 0.0003    # e.g. learning-rate for Adam
+    weight_decay: 0.0001    # weight decay for Adam
+    eps: 0.0001   # Increase eps if using mixed precision training because : Nvidia recommends increasing your epsilon by 1e3 when training with Mixed Precision. So instead of the default 1e-07, I use 1e-04 and this has made the world of difference with 0 downside in terms of the models ability to learn and most importantly no more NaNs.
+  early_stopping_patience: 100   # Number of epochs before applying early stopping after metric has not been improved. Metric used is total loss. [int]
+  scheduler:                # Learning rate scheduler. If no scheduler is selected here, then the learning rate stays constant
+    scheduler_type: "exponential"        # Name of learning rate scheduler. Currently implemented: "constant", "exponential", "cosine". [str]
+    hyperparameters:       # gamma [default 0.95] for "exponential", "eta_min" [default 1e-5] for CosineAnnealingLR
+      gamma: 0.85
+  sampling_strategy: "cell+tissue"       # Sampling strategy. Implemented are "random", "cell", "tissue" and "cell+tissue" [str] [Optional, defaults to "random"]
+  sampling_gamma: 0.6          # Gamma for balancing sampling. Must be between 0 (equal weights) and 1 (100% oversampling) [float] [Optional, defaults to 1]
+  #ignore_cat: []              # List of categories to ignore during training (a small weights was given in the losses for NT, and this will ignore these cat in the sampling strategy for balancing). [list[str]] [Optional, defaults to []]
+  mixed_precision: True         # Mixed precision Flag. [bool] [Optional, default False]
+  eval_every: 1              # Number of training epochs between every validation. If 1, alternating training and validation as commonly used. [int] [Optional, default 1]
+
+
+#################################
+## Parts of the model to train ##
+#################################
+      # - 'NTonly' : Train only the NT branch and the classifier head for tissues -> choose very big number in unfreeze_epoch
+      # - 'lora', 'plora', 'adaptformer', 'bottleneck' : Freeze the encoder and train the corresponding adapter and the decoder and the classifier head for tissues -> choose very big number in unfreeze_epoch
+      # - 'all' : Train the whole model (no adapter) -> choose in unfreeze_epoch the epoch to unfreeze the encoder
+      # - 'freeze' : Freeze the whole model (useful to estimate the range of each loss)
+adapters:
+  adapter_type: 'all'        # Adapter Type: Options are: 'NTonly', 'lora', 'plora', 'adaptformer', 'bottleneck', 'all', 'freeze' [str]
+  plora:
+    rank: 128
+    alpha: 16
+  lora:
+    rank: 64
+    alpha: 16
+  adaptformer:
+    reduction: 8
+    activation: ReLU
+  bottleneck:
+    reduction: 16
+    activation: ReLU
+  
+# Advice: If adapters then start using bottleneck or pLora in encoder instead, as it's easier for learning rate training - defreeze all layers with the word “adapter” but also the norms.
+
+
+#####################
+## Transformations ##
+#####################
+# Here all options are given. Remove transformations by removing them from this section
+transformations:
+  hed_augmentation:         # H&E specific augmentation
+    p: 0.25                 # Probability [float, between 0 and 1]
+    sigma: 0.05             # Sigma for Gaussian noise [float]
+  randomrotate90:           # RandomRotation90
+    p: 0.5                     # Probability [float, between 0 and 1]
+  horizontalflip:           # HorizontalFlip
+    p: 0.5                     # Probability [float, between 0 and 1]
+  verticalflip:             # VerticalFlip
+    p: 0.5                     # Probability [float, between 0 and 1]
+  downscale:                # Downscaling
+    p: 0.15                     # Probability [float, between 0 and 1]
+    scale: 0.5                 # Scaling factor, maximum should be 0.5. Must be smaller than 1 [float, between 0 and 1]
+  blur:                     # Blur
+    p: 0.2                     # Probability [float, between 0 and 1]
+    blur_limit: 10            # Bluring limit, maximum should be 10, recommended 10 [float]
+  gaussnoise:               # GaussianNoise
+    p: 0.25                     # Probability [float, between 0 and 1]
+    var_limit: 50             # Variance limit, maxmimum should be 50, recommended 10 [float]
+  # colorjitter:              # ColorJitter  # To comment if HED augmentation is used
+  #   p: 0.2                     # Probability [float, between 0 and 1]
+  #   scale_setting: 0.25         # Scaling for contrast and brightness, recommended 0.25 [float]
+  #   scale_color: 0.1           # Scaling for hue and saturation, recommended 0.1 [float]
+  superpixels:              # SuperPixels
+    p: 0.1                     # Probability [float, between 0 and 1]
+  zoomblur:                 # ZoomBlur
+    p: 0.1                     # Probability [float, between 0 and 1]
+  randomsizedcrop:          # RandomResizeCrop
+    p: 0.1                     # Probability [float, between 0 and 1]
+  elastictransform:         # ElasticTransform
+    p: 0.2                     # Probability [float, between 0 and 1]
+  normalize:                # Normalization
+    mean: [0.5, 0.5, 0.5]                  # Mean for Normalizing, default to (0.5, 0.5, 0.5) [list[float], between 0 and 1 for each entry]
+    std: [0.5, 0.5, 0.5]                   # STD for Normalizing, default to (0.5, 0.5, 0.5) [list[float], between 0 and 1 for each entry]
+
+
+#########################
+## Model for inference ##
+#########################
+eval_checkpoint: "latest_checkpoint.pth"           # Either select "model_best.pth", "latest_checkpoint.pth" or one of the intermediate checkpoint names, e.g., "checkpoint_100.pth"
