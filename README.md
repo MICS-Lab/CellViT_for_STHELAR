@@ -1,5 +1,9 @@
 # Fine-Tuning the CellViT Model with STHELAR, a Xenium-Based Spatial Transcriptomics Dataset
 
+<p>
+    <a href="https://doi.org/10.5281/zenodo.15849397"><img src="https://zenodo.org/badge/1015304513.svg" alt="DOI"></a>
+</p>
+
 This repository is adapted from the original [CellViT repository](https://github.com/TIO-IKIM/CellViT) with the following reference:  
 Hörst, F. et al. CellViT: Vision Transformers for precise cell segmentation and classification. Medical Image Analysis 94, 103143 (2024). https://doi.org/10.1016/j.media.2024.103143
 
