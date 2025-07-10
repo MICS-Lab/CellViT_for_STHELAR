@@ -13,7 +13,9 @@ The resulting dataset includes:
 - H&E image patches
 - Corresponding nucleus segmentation masks
 - Cell-type annotations derived from RNA information
-- Tissue provenance metadata
+- Tissue provenance metadata  
+
+This dataset is available online at [STHELAR dataset](https://www.ebi.ac.uk/biostudies/bioimages/studies/S-BIAD2146).
 
 The goal is to fine-tune the CellViT model using a large-scale dataset with more precise cell type classes.
 
@@ -43,4 +45,4 @@ The following files have been added to support our dataset preparation and analy
 
 ## Related Publication
 
-A detailed description of the pipeline, methods, and results can be found in the following article: [link to article].
+A detailed description of the pipeline, methods, and results can be found in the following article: [link to article coming...].
