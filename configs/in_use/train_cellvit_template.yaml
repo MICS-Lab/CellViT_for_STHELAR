@@ -11,8 +11,8 @@ logging:
   tags:                     # List of tags, e.g., ["baseline", "run1"] [str]
     - "training_2"
     - "CellViT-SAM-H-40x"
-  wandb_dir: "/lustre/fswork/projects/rech/bry/ubu16ws/HE2CellType/HE2CT/trainings/training_2"               # Directory to store the wandb file. CAREFUL: Directory must exists [str]
-  log_dir: "/lustre/fswork/projects/rech/bry/ubu16ws/HE2CellType/HE2CT/trainings/training_2/log"                 # Direcotry to store all logging related files and outputs [str]
+  wandb_dir: "/lustre/fswork/projects/rech/user/HE2CellType/HE2CT/trainings/training_2"               # Directory to store the wandb file. CAREFUL: Directory must exists [str]
+  log_dir: "/lustre/fswork/projects/rech/user/HE2CellType/HE2CT/trainings/training_2/log"                 # Direcotry to store all logging related files and outputs [str]
   level: "debug"                   # Level of logging must be either ["critical", "error", "warning", "info", "debug"] [str]
   log_images: True              # If images should be logged to WandB for this run. [bool] [Optional, defaults to False]
   #group:                    # WandB group tag [str] [Optional, defaults to None]
@@ -35,7 +35,7 @@ gpu: 0                       # Number of GPU to run experiment on [int] (or "mps
 ###############################
 data:
   dataset: "PanNuke"                 # Name of dataset, currently supported: PanNuke, Conic. Select your dataset and the script will automatically select the corresponding experiment [str]
-  dataset_path: "/lustre/fswork/projects/rech/bry/ubu16ws/HE2CellType/HE2CT/training_datasets/ds_2"            # Path to dataset, compare ./docs/readmes/pannuke.md for further details [str]
+  dataset_path: "/lustre/fswork/projects/rech/user/HE2CellType/HE2CT/training_datasets/ds_2"            # Path to dataset, compare ./docs/readmes/pannuke.md for further details [str]
   macenko_normalization: False    # If Macenko normalization should be used. [bool] [Optional, defaults to False]
   train_folds: ['train']        # List of fold str to use for training [list[str]]
   val_folds: ['valid']               # List of fold str to use for validation [list[str]]
@@ -80,8 +80,8 @@ data:
 ###################
 model:
   backbone: "SAM-H"                # Backbone Type: Options are: default, ViT256, SAM-B, SAM-L, SAM-H
-  pretrained_encoder: "/lustre/fswork/projects/rech/bry/ubu16ws/HE2CellType/HE2CT/trainings/pretrained_models/sam_vit_h.pth"      # Set path to a pretrained encoder [str]
-  pretrained: "/lustre/fswork/projects/rech/bry/ubu16ws/HE2CellType/HE2CT/trainings/pretrained_models/CellViT-SAM-H-x40.pth"              # Path to a pretrained model (.pt or .pth file) [str, default None]
+  pretrained_encoder: "/lustre/fswork/projects/rech/user/HE2CellType/HE2CT/trainings/pretrained_models/sam_vit_h.pth"      # Set path to a pretrained encoder [str]
+  pretrained: "/lustre/fswork/projects/rech/user/HE2CellType/HE2CT/trainings/pretrained_models/CellViT-SAM-H-x40.pth"              # Path to a pretrained model (.pt or .pth file) [str, default None]
   embed_dim: 1280               # Embedding dimension for ViT - typical values are 384 (ViT-S), 768 (ViT-B), 1024 (ViT-L), 1280 (ViT-H) [int]
   input_channels: 3          # Number of input channels, usually 3 for RGB [int, default 3]
   depth: 32                   # Number of Transformer Blocks to use - typical values are 12 (ViT-S), 12 (ViT-B), 24 (ViT-L), 32 (ViT-H) [int]
