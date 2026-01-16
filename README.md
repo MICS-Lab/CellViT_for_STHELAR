@@ -47,3 +47,6 @@ The following files have been added to support our dataset preparation and analy
     - `macenko_normationzation(_v2).py`: Perform Macenko normalization on the dataset.
 - In `cell_segmentation/utils`:
     - `HED_augmentation.py`: Specific augmentation for H&E slides.
+
+
+**Note:** The "Other" category in the article and the “Dead” category in the code (for training with detailed labels) refer to the same group of cells. In the manuscript, we consistently use "Other", whereas "Dead" appears only in the codebase. The term "Dead" reflects an unverified hypothesis about cell state and may be incorrect for some cells. For this reason, we deliberately use the neutral term "Other" in the article.
