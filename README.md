@@ -39,7 +39,7 @@ The following files have been added to support our dataset preparation and analy
 
 - In `cell_segmentation/datasets`:
     - `convert_into_zip.py`: Converts the dataset into ZIP format.
-    - `make_folds_pannuke.py`: Creates data splits based on slide selection and patch-level metrics.
+    - `make_folds_pannuke.py`: Creates data splits based on slide selection and patch-level metrics. This code is provided to reproduce the 'CellViT fine-tuning' illustrative experiments presented in the 'Technical validation' section. As noted in the paper, this patch-level splitting with overlap can lead to over-optimistic results. We provide full metadata, including slide_id and patch coordinates, to allow users to implement more robust validation strategies, such as slide-level (WSI) splitting or spatial cross-validation.
     - `analyse_ds_patches.ipynb`: Analyzes the composition and distribution of patches in the dataset.
     - `get_weights_dataset.ipynb`: Computes weights for losses and dataset balancing.
     - `calculate_mean_std_train.py`: Calculates the mean and standard deviation of RGB channels in the training set.
