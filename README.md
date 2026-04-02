@@ -22,7 +22,7 @@ Data availability:
 
 The goal is to fine-tune the CellViT model using a large-scale dataset with more precise cell type classes.
 
-A detailed description of the pipeline, methods, and results can be found in the following article: Giraud-Sauveur, F. et al. STHELAR, a multi-tissue dataset linking spatial transcriptomics and histology for cell type annotation. bioRxiv (2025) [doi:10.1101/2025.07.11.664123.](https://www.biorxiv.org/content/10.1101/2025.07.11.664123v1)
+A detailed description of the pipeline, methods, and results can be found in the following article: ***Giraud-Sauveur, F., Blampey, Q., Benkirane, H. et al. STHELAR, a multi-tissue dataset linking spatial transcriptomics and histology for cell type annotation. Sci Data (2026). [doi:10.1038/s41597-026-06937-6](https://doi.org/10.1038/s41597-026-06937-6)***
 
 ## CellViT Model and Codebase Modifications
 
