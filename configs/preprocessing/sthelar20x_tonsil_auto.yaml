@@ -1,0 +1,13 @@
+sthelar_root: /gpfs/workdir/taddeial/workspace/Datasets/STHELAR_20x
+output_root: /gpfs/workdir/taddeial/workspace/Datasets/cellvit_ready/sthelar20x_tonsil_auto
+tissue: tonsil
+tissue_name: Tonsil
+strategy: auto
+split_axis: x
+boundary_margin: 128
+train_frac: 0.70
+valid_frac: 0.15
+test_frac: 0.15
+max_patches_per_slide: null
+max_per_split: null
+random_seed: 42
