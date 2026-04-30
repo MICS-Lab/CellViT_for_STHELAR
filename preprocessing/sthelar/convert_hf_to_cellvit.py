@@ -915,9 +915,16 @@ def recover_rows_by_key(
 # ============================================================
 
 def convert(args: argparse.Namespace) -> None:
+    print("\nEffective configuration:")
+    for key, value in sorted(vars(args).items()):
+        print(f"  {key}: {value}")
+    
     sthelar_root = as_path(args.sthelar_root)
     output_root = as_path(args.output_root)
 
+    if not sthelar_root.exists():
+        raise FileNotFoundError(f"STHELAR root does not exist: {sthelar_root}")
+    
     prepare_output_root(output_root, overwrite=args.overwrite)
 
     tmp_root = output_root / "_tmp"
