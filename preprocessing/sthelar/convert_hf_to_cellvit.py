@@ -602,10 +602,19 @@ def infer_slide_split_lists(
     train_slides: Optional[list[str]],
     valid_slides: Optional[list[str]],
     test_slides: Optional[list[str]],
+    train_frac: float,
+    valid_frac: float,
+    test_frac: float,
+    random_seed: int,
 ) -> tuple[list[str], list[str], list[str], bool]:
     """
     Returns:
         train_slides, valid_slides, test_slides, uses_spatial_valid_inside_train
+
+    Logic:
+    - explicit split: use user-provided train/valid/test slides
+    - 2 slides: one train-source slide, one test slide; validation carved spatially from train
+    - >=3 slides: split whole slides according to train/valid/test fractions
     """
     selected_slides = sorted(str(s) for s in selected_slides)
 
@@ -635,20 +644,42 @@ def infer_slide_split_lists(
     if len(selected_slides) == 2:
         return [selected_slides[0]], [], [selected_slides[1]], True
 
-    # Conservative default for >=3 slides:
-    # train = all except last two, valid = second last, test = last
-    return selected_slides[:-2], [selected_slides[-2]], [selected_slides[-1]], False
+    validate_fractions(train_frac, valid_frac, test_frac)
 
+    rng = np.random.default_rng(random_seed)
+    slides = np.array(selected_slides)
+    rng.shuffle(slides)
+
+    n = len(slides)
+
+    n_test = max(1, int(round(test_frac * n)))
+    n_valid = max(1, int(round(valid_frac * n)))
+
+    if n_test + n_valid >= n:
+        n_test = 1
+        n_valid = 1
+
+    n_train = n - n_valid - n_test
+
+    train_slides = sorted(slides[:n_train].tolist())
+    valid_slides = sorted(slides[n_train:n_train + n_valid].tolist())
+    test_slides = sorted(slides[n_train + n_valid:].tolist())
+
+    return train_slides, valid_slides, test_slides, False
 
 def assign_slide_split(
     patch_info: pd.DataFrame,
     axis: str,
+    train_frac: float,
+    valid_frac: float,
+    test_frac: float,
     train_frac_inside_train_slide: float,
     valid_frac_inside_train_slide: float,
     boundary_margin: int,
     train_slides: Optional[list[str]],
     valid_slides: Optional[list[str]],
     test_slides: Optional[list[str]],
+    random_seed: int,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     selected_slides = sorted(patch_info["slide_id"].astype(str).unique().tolist())
 
@@ -657,6 +688,10 @@ def assign_slide_split(
         train_slides=train_slides,
         valid_slides=valid_slides,
         test_slides=test_slides,
+        train_frac=args.train_frac,
+        valid_frac=args.valid_frac,
+        test_frac=args.test_frac,
+        random_seed=args.random_seed,
     )
 
     df = patch_info.copy()
@@ -788,12 +823,16 @@ def assign_split(args: argparse.Namespace, patch_info: pd.DataFrame) -> tuple[pd
         out, manifest_extra = assign_slide_split(
             patch_info=patch_info,
             axis=args.split_axis,
+            train_frac=args.train_frac,
+            valid_frac=args.valid_frac,
+            test_frac=args.test_frac,
             train_frac_inside_train_slide=args.train_frac_inside_train_slide,
             valid_frac_inside_train_slide=args.valid_frac_inside_train_slide,
             boundary_margin=args.boundary_margin,
             train_slides=args.train_slides,
             valid_slides=args.valid_slides,
             test_slides=args.test_slides,
+            random_seed=args.random_seed,
         )
 
     elif strategy_actual == "baseline":
