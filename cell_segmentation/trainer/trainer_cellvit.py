@@ -710,17 +710,39 @@ class CellViTTrainer(BaseTrainer):
             DataclassHVStorage: GT-Results with matching shapes and output types
         """
         # get ground truth values, perform one hot encoding for segmentation maps
-        gt_nuclei_binary_map_onehot = (F.one_hot(masks["nuclei_binary_map"], num_classes=2)).type(torch.float32)  # background, nuclei
-        nuclei_type_maps = torch.squeeze(masks["nuclei_type_map"]).type(torch.int64)
-        gt_nuclei_type_maps_onehot = F.one_hot(nuclei_type_maps, num_classes=self.num_classes).type(torch.float32)  # background + nuclei types
+        nuclei_binary_map = masks["nuclei_binary_map"].type(torch.int64)
+        nuclei_type_maps = masks["nuclei_type_map"].type(torch.int64)
+        instance_map = masks["instance_map"]
 
+        if nuclei_binary_map.dim() == 4 and nuclei_binary_map.shape[1] == 1:
+            nuclei_binary_map = nuclei_binary_map.squeeze(1)
+        if nuclei_binary_map.dim() == 2:
+            nuclei_binary_map = nuclei_binary_map.unsqueeze(0)
+
+        if nuclei_type_maps.dim() == 4 and nuclei_type_maps.shape[1] == 1:
+            nuclei_type_maps = nuclei_type_maps.squeeze(1)
+        if nuclei_type_maps.dim() == 2:
+            nuclei_type_maps = nuclei_type_maps.unsqueeze(0)
+
+        if instance_map.dim() == 4 and instance_map.shape[1] == 1:
+            instance_map = instance_map.squeeze(1)
+        if instance_map.dim() == 2:
+            instance_map = instance_map.unsqueeze(0)
+
+        gt_nuclei_binary_map_onehot = F.one_hot(
+            nuclei_binary_map, num_classes=2
+        ).type(torch.float32)
+
+        gt_nuclei_type_maps_onehot = F.one_hot(
+            nuclei_type_maps, num_classes=self.num_classes
+        ).type(torch.float32)
         # assemble ground truth dictionary
         gt = {
             "nuclei_type_map": gt_nuclei_type_maps_onehot.permute(0, 3, 1, 2).to(self.device),  # shape: (batch_size, H, W, num_nuclei_classes)
             "nuclei_binary_map": gt_nuclei_binary_map_onehot.permute(0, 3, 1, 2).to(self.device),  # shape: (batch_size, H, W, 2)
             "hv_map": masks["hv_map"].to(self.device),  # shape: (batch_size, H, W, 2)
-            "instance_map": masks["instance_map"].to(self.device),  # shape: (batch_size, H, W) -> each instance has one integer
-            "instance_types_nuclei": (gt_nuclei_type_maps_onehot * masks["instance_map"][..., None]).permute(0, 3, 1, 2).to(self.device),  # shape: (batch_size, num_nuclei_classes, H, W) -> instance has one integer, for each nuclei class
+            "instance_map": instance_map.to(self.device),  # shape: (batch_size, H, W) -> each instance has one integer
+            "instance_types_nuclei": (gt_nuclei_type_maps_onehot * instance_map[..., None]).permute(0, 3, 1, 2).to(self.device),  # shape: (batch_size, num_nuclei_classes, H, W) -> instance has one integer, for each nuclei class
             "tissue_types": torch.Tensor([self.tissue_types[t] for t in tissue_types]).type(torch.LongTensor).to(self.device),  # shape: batch_size
         }
         if "regression_map" in masks:
