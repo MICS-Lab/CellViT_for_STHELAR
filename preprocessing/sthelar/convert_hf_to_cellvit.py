@@ -1133,6 +1133,16 @@ def convert(args: argparse.Namespace) -> None:
             "train": int((patch_info["split"] == "train").sum()),
             "valid": int((patch_info["split"] == "valid").sum()),
             "test": int((patch_info["split"] == "test").sum()),
+            "total": int(len(patch_info)),
+        },
+        "slides_by_split": {
+            split_name: sorted(
+                patch_info.loc[
+                    patch_info["split"] == split_name,
+                    "slide_id"
+                ].dropna().astype(str).unique().tolist()
+            )
+            for split_name in ["train", "valid", "test"]
         },
         **manifest_extra,
     }
