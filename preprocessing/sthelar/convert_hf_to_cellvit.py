@@ -688,10 +688,10 @@ def assign_slide_split(
         train_slides=train_slides,
         valid_slides=valid_slides,
         test_slides=test_slides,
-        train_frac=args.train_frac,
-        valid_frac=args.valid_frac,
-        test_frac=args.test_frac,
-        random_seed=args.random_seed,
+        train_frac=train_frac,
+        valid_frac=valid_frac,
+        test_frac=test_frac,
+        random_seed=random_seed,
     )
 
     df = patch_info.copy()
