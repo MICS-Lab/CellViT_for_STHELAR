@@ -1,0 +1,124 @@
+# Example configuration for HoverNet-Cell-Segmentation
+# see comments and use cases in configs/in_use
+# comment and project setup for wandb
+adapters:
+  adapter_type: all
+
+logging:
+  mode: "offline"
+  project: "sthelar20x_tonsil"
+  notes: "CellViT fine-tuning on STHELAR 20x tonsil auto debug split"
+  log_comment: "sthelar20x_tonsil_auto_debug"
+  tags:
+    - "sthelar"
+    - "tonsil"
+    - "20x"
+    - "auto_split"
+    - "debug"
+  wandb_dir: "run/sthelar20x_tonsil_auto_debug"
+  log_dir: "run/sthelar20x_tonsil_auto_debug/log"
+  level: "debug"
+  log_images: False
+
+# seeding
+random_seed: 19             # Seed for numpy, pytorch etc. [int]
+
+# hardware
+gpu: 'mps'                       # Number of GPU to run experiment on [int] (or "mps" if mac)
+
+# setting paths and dataset
+data:
+  dataset: "PanNuke"
+  dataset_path: "/Volumes/T9/Datasets/cellvit_ready/sthelar20x_tonsil_auto_debug"
+
+  train_folds: ["train"]
+  val_folds: ["valid"]
+  test_folds: ["test"]
+
+  num_nuclei_classes: 5
+  num_tissue_classes: 1
+  input_shape: 256
+
+# model options
+model:
+  backbone: "SAM-H"
+  pretrained_encoder: null
+  pretrained: null
+  embed_dim: 1280
+  input_channels: 3
+  depth: 32
+  num_heads: 16
+  extract_layers: 4
+  shared_decoders: False
+
+# loss function settings (best shown by an example). See all implemented loss functions in base_ml.base_loss module
+# loss:
+#   nuclei_binary_map:        # Name of the branch. Possible branches are "nuclei_binary_map", "hv_map", "nuclei_type_map", "tissue_types". If not defined default HoverNet settings are used [str]
+#     bce:                    # Name of the loss [str]
+#       loss_fn: xentropy_loss  # Loss_fn, name is defined in LOSS_DICT in base_ml.base_loss module [str]
+#       weight: 1               # Weight parameter [int] [Optional, defaults to 1]
+#       args:                   # Parameters for the loss function if necessary. Does not need to be set, can also be empty. Just given as an example here
+#         arg1:                 # 1. Parameter etc. (Name must match to the initialization parameter given for the loss)
+#     dice:                   # Name of the loss [str]
+#       loss_fn: dice_loss    # Loss_fn, name is defined in LOSS_DICT in base_ml.base_loss module [str]
+#       weight: 1             # Weight parameter [int] [Optional, defaults to 1]
+#     focaltverskyloss:       # Name of the loss [str]
+#       loss_fn: FocalTverskyLoss # Loss_fn, name is defined in LOSS_DICT in base_ml.base_loss module [str]
+#       weight: 1             # Weight parameter [int] [Optional, defaults to 1]
+      # optional parameters, not implemented yet
+  # hv_map:                   another branch
+  # nuclei_type_map:          another branch
+  # tissue_types:             another branch
+
+
+# training options
+training:
+  batch_size: 2
+  epochs: 1
+  unfreeze_epoch: 2
+  optimizer: "AdamW"
+  optimizer_hyperparameter:
+    lr: 0.001
+    betas: [0.85, 0.85]
+  early_stopping_patience: 10
+  scheduler:
+    scheduler_type: "exponential"
+  sampling_strategy: "cell"
+  sampling_gamma: 0.85
+  mixed_precision: False
+  eval_every: 1
+
+# transformations, here all options are given. Remove transformations by removing them from this section
+transformations:
+  randomrotate90:           # RandomRotation90
+    p: 0.5                     # Probability [float, between 0 and 1]
+  horizontalflip:           # HorizontalFlip
+    p: 0.5                     # Probability [float, between 0 and 1]
+  verticalflip:             # VerticalFlip
+    p: 0.5                     # Probability [float, between 0 and 1]
+  downscale:                # Downscaling
+    p: 0.5                     # Probability [float, between 0 and 1]
+    scale: 0.2                 # Scaling factor, maximum should be 0.5. Must be smaller than 1 [float, between 0 and 1]
+  blur:                     # Blur
+    p: 0.5                     # Probability [float, between 0 and 1]
+    blur_limit: 10            # Bluring limit, maximum should be 10, recommended 10 [float]
+  gaussnoise:               # GaussianNoise
+    p: 0.5                     # Probability [float, between 0 and 1]
+    var_limit: 10             # Variance limit, maxmimum should be 50, recommended 10 [float]
+  colorjitter:              # ColorJitter
+    p: 0.5                     # Probability [float, between 0 and 1]
+    scale_setting: 0.25         # Scaling for contrast and brightness, recommended 0.25 [float]
+    scale_color: 0.1           # Scaling for hue and saturation, recommended 0.1 [float]
+  superpixels:              # SuperPixels
+    p: 0.5                     # Probability [float, between 0 and 1]
+  zoomblur:                 # ZoomBlur
+    p: 0.5                     # Probability [float, between 0 and 1]
+  randomsizedcrop:          # RandomResizeCrop
+    p: 0.5                     # Probability [float, between 0 and 1]
+  elastictransform:         # ElasticTransform
+    p: 0.5                     # Probability [float, between 0 and 1]
+  normalize:                # Normalization
+    mean: [0.5, 0.5, 0.5]                  # Mean for Normalizing, default to (0.5, 0.5, 0.5) [list[float], between 0 and 1 for each entry]
+    std: [0.5, 0.5, 0.5]                   # STD for Normalizing, default to (0.5, 0.5, 0.5) [list[float], between 0 and 1 for each entry]
+
+eval_checkpoint: "latest_checkpoint.pth"           # Either select "model_best.pth", "latest_checkpoint.pth" or one of the intermediate checkpoint names, e.g., "checkpoint_100.pth"

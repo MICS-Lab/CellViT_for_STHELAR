@@ -1,0 +1,22 @@
+sthelar_root: /Volumes/T9/Datasets/STHELAR_20x
+output_root: /Volumes/T9/Datasets/cellvit_ready/sthelar20x_tonsil_auto_debug
+
+tissue: tonsil
+tissue_name: Tonsil
+
+strategy: auto
+split_axis: x
+boundary_margin: 0 # 64 or 128
+
+train_frac: 0.70
+valid_frac: 0.15
+test_frac: 0.15
+
+train_frac_inside_train_slide: 0.85
+valid_frac_inside_train_slide: 0.15
+
+max_patches_per_slide: 50
+max_per_split: 30
+
+random_seed: 42
+overwrite: true
