@@ -4,9 +4,6 @@
   <img src="docs/figures/figure.png" alt="STHELAR-CellViT workflow" width="850">
 </p>
 
-<p>
-    <a href="https://doi.org/10.5281/zenodo.15849397"><img src="https://zenodo.org/badge/1015304513.svg" alt="DOI"></a>
-</p>
 
 This repository is adapted from the original [CellViT repository](https://github.com/TIO-IKIM/CellViT) with the following reference:
 
