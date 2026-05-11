@@ -10,6 +10,7 @@ run/
 wandb/
 outputs/
 checkpoints/
+logs/
 
 # Model checkpoints / large binaries
 *.pth
@@ -25,4 +26,3 @@ __pycache__/
 # macOS / external drive metadata
 .DS_Store
 ._*
-
