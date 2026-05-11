@@ -40,7 +40,7 @@ def select_dataset(
         "test",
     ], "Unknown split type!"
 
-    if dataset_name.lower() == "pannuke":
+    if dataset_name.lower() in ["pannuke", "sthelar"]:
         if split == "train":
             folds = dataset_config["train_folds"]
         if split == "val" or split == "validation":
