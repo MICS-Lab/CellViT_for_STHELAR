@@ -441,7 +441,7 @@ class ExperimentCellVitPanNuke(BaseExperiment):
                     "weight": loss_sett["weight"],
                     "state": loss_sett["state"],
                 }
-        elif "regression_loss" in self.run_conf["model"].keys():
+        elif self.run_conf["model"].get("regression_loss", False) is True:
             loss_fn_dict["regression_map"] = {
                 "mse": {"loss_fn": retrieve_loss_fn("mse_loss_maps"), "weight": 1, "state": "static"},
             }
@@ -536,9 +536,11 @@ class ExperimentCellVitPanNuke(BaseExperiment):
             )
         if "regression_loss" in self.run_conf["model"].keys():
             self.run_conf["data"]["regression_loss"] = True
+        
+        dataset_name = self.run_conf["data"].get("dataset", "pannuke")
 
         full_dataset = select_dataset(
-            dataset_name="pannuke",
+            dataset_name=dataset_name,
             split="train",
             dataset_config=self.run_conf["data"],
             transforms=train_transforms,
@@ -558,7 +560,7 @@ class ExperimentCellVitPanNuke(BaseExperiment):
         else:
             train_dataset = full_dataset
             val_dataset = select_dataset(
-                dataset_name="pannuke",
+                dataset_name=dataset_name,
                 split="validation",
                 dataset_config=self.run_conf["data"],
                 transforms=val_transforms,
@@ -664,6 +666,7 @@ class ExperimentCellVitPanNuke(BaseExperiment):
                 drop_rate=self.run_conf["training"].get("drop_rate", 0),
                 regression_loss=regression_loss,
             )
+            unused_keys = []
             if pretrained_encoder is not None:
                 self.logger.info(f"Loading pretrained SAM encoder from path: {model.model_path}")
                 model.load_pretrained_encoder(model.model_path)
@@ -678,11 +681,43 @@ class ExperimentCellVitPanNuke(BaseExperiment):
                     self.logger.info(f"Just have a look to the config of the pretrained CellViT model: {cellvit_pretrained['config']}")
                     
                     # ---- adapt to new num of classes for nuclei and tissues only if pretrained model from cellvit authors ---- #
-                    if pretrained_model.endswith('CellViT-SAM-H-x40.pth'):
-                        pretrained_dict_filtered = {k: v for k, v in cellvit_pretrained["model_state_dict"].items() if 'nuclei_type_maps_decoder.decoder0_header' not in k and 'classifier_head' not in k}
-                    else:
-                        pretrained_dict_filtered = {k: v for k, v in cellvit_pretrained["model_state_dict"].items()}
-                    unused_keys = [k for k in model.state_dict().keys() if k not in pretrained_dict_filtered]
+                    pretrained_state_dict = cellvit_pretrained["model_state_dict"]
+                    model_state_dict = model.state_dict()
+
+                    pretrained_dict_filtered = {}
+                    skipped_missing = []
+                    skipped_shape = []
+
+                    for k, v in pretrained_state_dict.items():
+                        if k not in model_state_dict:
+                            skipped_missing.append(k)
+                            continue
+
+                        if model_state_dict[k].shape != v.shape:
+                            skipped_shape.append((k, tuple(v.shape), tuple(model_state_dict[k].shape)))
+                            continue
+
+                        pretrained_dict_filtered[k] = v
+
+                    unused_keys = [k for k in model_state_dict.keys() if k not in pretrained_dict_filtered]
+
+                    self.logger.info(
+                        f"Loading {len(pretrained_dict_filtered)} compatible pretrained tensors "
+                        f"out of {len(pretrained_state_dict)} tensors."
+                    )
+
+                    if skipped_shape:
+                        self.logger.info("Skipped pretrained tensors with incompatible shape:")
+                        for k, ckpt_shape, model_shape in skipped_shape:
+                            self.logger.info(
+                                f"  {k}: checkpoint={ckpt_shape}, current_model={model_shape}"
+                            )
+
+                    if skipped_missing:
+                        self.logger.debug(
+                            f"Skipped {len(skipped_missing)} pretrained tensors not present in current model."
+                        )
+
                     self.logger.info(f"Unused keys in model's state dict: {unused_keys}")
                     self.logger.info(model.load_state_dict(pretrained_dict_filtered, strict=False))
                     # ------------------------------------------------------------ #
