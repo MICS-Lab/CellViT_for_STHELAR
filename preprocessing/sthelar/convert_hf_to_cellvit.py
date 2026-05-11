@@ -26,8 +26,7 @@ Supported split strategies:
 
 - slide:
     Slide-level split. Useful when at least two slides/scans are available.
-    If only two slides are available, one slide is used for test and train/valid
-    are carved spatially from the other slide.
+    If only two slides are available, one slide is used for train/valid, spatially separated, and another for test.
 
 - auto:
     If >= 2 selected slides are available, use slide.
@@ -121,6 +120,56 @@ def load_yaml_config(path: Optional[str]) -> dict[str, Any]:
         raise ValueError(f"Config YAML must contain a mapping/dictionary: {config_path}")
 
     return config
+
+def normalize_nuclei_types(nuclei_types: Optional[dict[str, Any]]) -> dict[str, int]:
+    """
+    Normalize nuclei_types from YAML.
+
+    Expected preferred format:
+
+    nuclei_types:
+      Background: 0
+      Immune: 1
+
+    Also supports:
+
+    nuclei_types:
+      0: Background
+      1: Immune
+    """
+    if nuclei_types is None:
+        return dict(NUCLEI_TYPES)
+
+    normalized = {}
+
+    for key, value in nuclei_types.items():
+        if isinstance(value, int):
+            normalized[str(key)] = int(value)
+        else:
+            normalized[str(value)] = int(key)
+
+    if "Background" not in normalized:
+        normalized["Background"] = 0
+
+    return dict(sorted(normalized.items(), key=lambda x: x[1]))
+
+
+def get_label_mapping(args: argparse.Namespace) -> dict[str, str]:
+    """
+    Return raw STHELAR label -> target class name mapping.
+    """
+    if args.label_mapping is not None:
+        return dict(args.label_mapping)
+
+    return dict(FIVE_CLASS_MAP)
+
+
+def get_class_to_int(args: argparse.Namespace) -> dict[str, int]:
+    """
+    Return target class name -> integer ID mapping.
+    """
+    nuclei_types = normalize_nuclei_types(args.nuclei_types)
+    return nuclei_types
 
 
 def as_path(value: str | Path) -> Path:
@@ -371,28 +420,54 @@ def decode_png_bytes(img_bytes: bytes) -> np.ndarray:
 
 
 def decode_cell_id_map(npz_bytes: bytes) -> np.ndarray:
-    return sp.load_npz(io.BytesIO(npz_bytes)).toarray().astype(np.int32, copy=False)
+    try:
+        return sp.load_npz(io.BytesIO(npz_bytes)).toarray().astype(np.int32, copy=False)
+    except Exception:
+        with io.BytesIO(npz_bytes) as f:
+            loader = np.load(f, allow_pickle=True)
+            cell_map_sparse = sp.csr_matrix(
+                (loader["data"], loader["indices"], loader["indptr"]),
+                shape=loader["shape"],
+            )
+            return cell_map_sparse.toarray().astype(np.int32, copy=False)
 
 
-def map_label_to_five_class(label: Any, cell_id_int: int) -> str:
+def map_label_to_target_class(
+    label: Any,
+    cell_id_int: int,
+    label_mapping: dict[str, str],
+    fallback_class: str = "Other",
+) -> str:
     if int(cell_id_int) == 0:
         return "Background"
 
     if pd.isna(label):
-        return "Other"
+        return fallback_class
 
-    return FIVE_CLASS_MAP.get(str(label), "Other")
+    return label_mapping.get(str(label), fallback_class)
 
 
-def build_type_map(cell_id_map: np.ndarray, slide_meta: pd.DataFrame) -> np.ndarray:
+def build_type_map(
+    cell_id_map: np.ndarray,
+    slide_meta: pd.DataFrame,
+    label_mapping: dict[str, str],
+    class_to_int: dict[str, int],
+    fallback_class: str = "Other",
+) -> np.ndarray:
     """
-    Build dense per-pixel type map:
+    Build dense per-pixel type map from STHELAR cell_id_map and metadata.
 
-        0 = Background
-        1 = Immune
-        2 = Stromal
-        3 = Epithelial
-        4 = Other
+    cell_id_map:
+        pixel -> cell_id_int
+
+    slide_meta:
+        cell_id_int -> cells_final_label_group
+
+    label_mapping:
+        raw STHELAR label -> target class name
+
+    class_to_int:
+        target class name -> integer class ID
     """
     ids_all, inv = np.unique(cell_id_map, return_inverse=True)
 
@@ -403,11 +478,23 @@ def build_type_map(cell_id_map: np.ndarray, slide_meta: pd.DataFrame) -> np.ndar
     )
 
     class_names = [
-        map_label_to_five_class(label, int(cell_id_int))
+        map_label_to_target_class(
+            label=label,
+            cell_id_int=int(cell_id_int),
+            label_mapping=label_mapping,
+            fallback_class=fallback_class,
+        )
         for cell_id_int, label in zip(ids_all, labels_for_ids)
     ]
 
-    lut = np.array([CLASS_TO_INT[name] for name in class_names], dtype=np.uint8)
+    missing_classes = sorted(set(class_names).difference(class_to_int.keys()))
+    if missing_classes:
+        raise ValueError(
+            "Some mapped class names are not present in nuclei_types/class_to_int: "
+            f"{missing_classes}. class_to_int={class_to_int}"
+        )
+
+    lut = np.array([class_to_int[name] for name in class_names], dtype=np.uint8)
     type_map = lut[inv].reshape(cell_id_map.shape)
     return type_map
 
@@ -429,8 +516,19 @@ def save_sparse_pair_npz(out_path: Path, inst_map: np.ndarray, type_map: np.ndar
     )
 
 
-def compute_cell_counts(inst_map: np.ndarray, type_map: np.ndarray) -> dict[str, int]:
-    counts = {name: 0 for name in COUNT_CLASS_NAMES}
+def compute_cell_counts(
+    inst_map: np.ndarray,
+    type_map: np.ndarray,
+    class_to_int: dict[str, int],
+) -> dict[str, int]:
+    count_class_names = [
+        name for name, idx in sorted(class_to_int.items(), key=lambda x: x[1])
+        if idx != 0
+    ]
+
+    int_to_class = {idx: name for name, idx in class_to_int.items()}
+
+    counts = {name: 0 for name in count_class_names}
 
     ids = np.unique(inst_map)
     ids = ids[ids != 0]
@@ -445,14 +543,9 @@ def compute_cell_counts(inst_map: np.ndarray, type_map: np.ndarray) -> dict[str,
         uniq, cnt = np.unique(vals, return_counts=True)
         cls = int(uniq[np.argmax(cnt)])
 
-        if cls == 1:
-            counts["Immune"] += 1
-        elif cls == 2:
-            counts["Stromal"] += 1
-        elif cls == 3:
-            counts["Epithelial"] += 1
-        elif cls == 4:
-            counts["Other"] += 1
+        name = int_to_class.get(cls, None)
+        if name is not None and name != "Background":
+            counts[name] = counts.get(name, 0) + 1
 
     return counts
 
@@ -960,6 +1053,29 @@ def convert(args: argparse.Namespace) -> None:
     
     sthelar_root = as_path(args.sthelar_root)
     output_root = as_path(args.output_root)
+    label_mapping = get_label_mapping(args)
+    class_to_int = get_class_to_int(args)
+
+    if "Background" not in class_to_int:
+        raise ValueError("nuclei_types must contain Background: 0")
+
+    if class_to_int["Background"] != 0:
+        raise ValueError("Background must have class ID 0")
+
+    fallback_class = args.fallback_class
+
+    if fallback_class not in class_to_int:
+        raise ValueError(
+            f"fallback_class={fallback_class} is not present in nuclei_types: {class_to_int}"
+        )
+
+    print("\nLabel mapping:")
+    for raw_label, target_label in sorted(label_mapping.items()):
+        print(f"  {raw_label} -> {target_label}")
+
+    print("\nTarget nuclei types:")
+    for name, idx in sorted(class_to_int.items(), key=lambda x: x[1]):
+        print(f"  {idx}: {name}")
 
     if not sthelar_root.exists():
         raise FileNotFoundError(f"STHELAR root does not exist: {sthelar_root}")
@@ -1070,7 +1186,13 @@ def convert(args: argparse.Namespace) -> None:
         cell_id_map = decode_cell_id_map(cell_id_map_bytes)
 
         slide_meta = slide_meta_by_id[slide_id]
-        type_map = build_type_map(cell_id_map, slide_meta).astype(np.int32)
+        type_map = build_type_map(
+            cell_id_map=cell_id_map,
+            slide_meta=slide_meta,
+            label_mapping=label_mapping,
+            class_to_int=class_to_int,
+            fallback_class=fallback_class,
+        ).astype(np.int32)
 
         if cell_id_map.shape != type_map.shape:
             raise ValueError(
@@ -1084,7 +1206,11 @@ def convert(args: argparse.Namespace) -> None:
         Image.fromarray(rgb).save(out_image_path)
         save_sparse_pair_npz(out_label_path, cell_id_map, type_map)
 
-        counts = compute_cell_counts(cell_id_map, type_map)
+        counts = compute_cell_counts(
+            inst_map=cell_id_map,
+            type_map=type_map,
+            class_to_int=class_to_int,
+        )
 
         type_rows.append(
             {
@@ -1093,16 +1219,10 @@ def convert(args: argparse.Namespace) -> None:
             }
         )
 
-        count_rows.append(
-            {
-                "Image": packed_file_name,
-                "Immune": counts["Immune"],
-                "Stromal": counts["Stromal"],
-                "Epithelial": counts["Epithelial"],
-                "Other": counts["Other"],
-                "split": split_value,
-            }
-        )
+        count_row = {"Image": packed_file_name}
+        count_row.update(counts)
+        count_row["split"] = split_value
+        count_rows.append(count_row)
 
         selected_image_entries.append((out_image_path, packed_file_name))
         selected_label_entries.append((out_label_path, packed_label_name))
@@ -1144,7 +1264,7 @@ def convert(args: argparse.Namespace) -> None:
         "tissue_types": {
             args.tissue_name: 0,
         },
-        "nuclei_types": NUCLEI_TYPES,
+        "nuclei_types": class_to_int,
     }
 
     with open(dataset_config_yaml, "w") as f:
@@ -1360,6 +1480,33 @@ def build_parser(defaults: dict[str, Any]) -> argparse.ArgumentParser:
         action="store_true",
         default=bool(defaults.get("keep_tmp", False)),
         help="Keep temporary decoded images/labels under output_root/_tmp.",
+    )
+    parser.add_argument(
+    "--label-mode",
+    type=str,
+    default=defaults.get("label_mode", "5class"),
+    help="Label mode name for documentation purposes, e.g. 5class or 9class.",
+    )
+
+    parser.add_argument(
+        "--fallback-class",
+        type=str,
+        default=defaults.get("fallback_class", "Other"),
+        help="Target class used when a raw label is missing or unmapped.",
+    )
+
+    parser.add_argument(
+        "--nuclei-types",
+        type=dict,
+        default=defaults.get("nuclei_types"),
+        help="Target nuclei class mapping. Usually provided via YAML config.",
+    )
+
+    parser.add_argument(
+        "--label-mapping",
+        type=dict,
+        default=defaults.get("label_mapping"),
+        help="Raw STHELAR label to target class mapping. Usually provided via YAML config.",
     )
 
     return parser

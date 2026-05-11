@@ -47,7 +47,7 @@ data:
 model:
   backbone: "SAM-H"
   pretrained_encoder: null
-  pretrained: null
+  pretrained: "models/pretrained/CellViT-SAM-H-x20.pth"
   embed_dim: 1280
   input_channels: 3
   depth: 32

@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import io
 import zipfile
+import yaml
 from pathlib import Path
 
 import numpy as np
@@ -41,7 +42,7 @@ from PIL import Image
 from scipy.sparse import csr_matrix
 
 
-CLASS_NAMES = {
+DEFAULT_CLASS_NAMES = {
     0: "Background",
     1: "Immune",
     2: "Stromal",
@@ -50,37 +51,166 @@ CLASS_NAMES = {
 }
 
 
+def load_class_names(dataset_root: Path) -> dict[int, str]:
+    """
+    Load class names from dataset_config.yaml.
+
+    Supports both formats:
+
+    nuclei_types:
+      Background: 0
+      Immune: 1
+
+    and:
+
+    nuclei_types:
+      0: Background
+      1: Immune
+
+    Falls back to DEFAULT_CLASS_NAMES if the file or key is missing.
+    """
+    config_path = dataset_root / "dataset_config.yaml"
+
+    if not config_path.exists():
+        print(f"Warning: dataset_config.yaml not found at {config_path}")
+        print("Using default class names.")
+        return DEFAULT_CLASS_NAMES
+
+    with open(config_path, "r") as f:
+        config = yaml.safe_load(f)
+
+    if config is None:
+        print(f"Warning: empty dataset_config.yaml at {config_path}")
+        print("Using default class names.")
+        return DEFAULT_CLASS_NAMES
+
+    nuclei_types = config.get("nuclei_types", None)
+
+    if nuclei_types is None:
+        print("Warning: 'nuclei_types' not found in dataset_config.yaml")
+        print("Using default class names.")
+        return DEFAULT_CLASS_NAMES
+
+    class_names = {}
+
+    for key, value in nuclei_types.items():
+        # Case 1: Background: 0
+        if isinstance(value, int):
+            class_names[int(value)] = str(key)
+
+        # Case 2: 0: Background
+        else:
+            try:
+                class_names[int(key)] = str(value)
+            except ValueError:
+                raise ValueError(
+                    "Could not parse nuclei_types in dataset_config.yaml. "
+                    f"Problematic entry: {key}: {value}"
+                )
+
+    if 0 not in class_names:
+        class_names[0] = "Background"
+
+    return dict(sorted(class_names.items()))
+
+def resolve_zip_member(zf: zipfile.ZipFile, requested_name: str) -> str:
+    """
+    Resolve a file name inside a zip archive.
+
+    This supports both:
+    - exact names, e.g. "tonsil_s0_123.png"
+    - nested names, e.g. "images/tonsil_s0_123.png"
+
+    It also ignores macOS AppleDouble files such as "._xxx".
+    """
+    names = [n for n in zf.namelist() if not Path(n).name.startswith("._")]
+
+    if requested_name in names:
+        return requested_name
+
+    requested_base = Path(requested_name).name
+    matches = [n for n in names if Path(n).name == requested_base]
+
+    if len(matches) == 1:
+        return matches[0]
+
+    if len(matches) > 1:
+        raise ValueError(
+            f"Ambiguous file name in zip: {requested_name}. Matches: {matches[:10]}"
+        )
+
+    raise FileNotFoundError(
+        f"File not found in zip: {requested_name}. "
+        f"First available names: {names[:10]}"
+    )
+
+
 def read_image_from_zip(zip_path: Path, image_name: str) -> np.ndarray:
     with zipfile.ZipFile(zip_path, "r") as zf:
-        with zf.open(image_name) as f:
+        member = resolve_zip_member(zf, image_name)
+        with zf.open(member) as f:
             img = Image.open(io.BytesIO(f.read())).convert("RGB")
     return np.asarray(img)
 
 
 def read_npz_from_zip(zip_path: Path, label_name: str) -> dict:
     with zipfile.ZipFile(zip_path, "r") as zf:
-        with zf.open(label_name) as f:
-            data = np.load(io.BytesIO(f.read()))
+        member = resolve_zip_member(zf, label_name)
+        with zf.open(member) as f:
+            data = np.load(io.BytesIO(f.read()), allow_pickle=True)
             return {k: data[k] for k in data.files}
 
 
-def sparse_from_npz_dict(data: dict, prefix: str) -> np.ndarray:
-    sparse = csr_matrix(
-        (
-            data[f"{prefix}_data"],
-            data[f"{prefix}_indices"],
-            data[f"{prefix}_indptr"],
-        ),
-        shape=tuple(data[f"{prefix}_shape"]),
+def array_from_npz_dict(data: dict, key: str) -> np.ndarray:
+    """
+    Load a map from an npz dictionary.
+
+    Supports two formats:
+    1. Dense:
+       data["inst_map"], data["type_map"]
+
+    2. Sparse CSR:
+       data["inst_map_data"], data["inst_map_indices"],
+       data["inst_map_indptr"], data["inst_map_shape"]
+    """
+    if key in data:
+        return np.asarray(data[key])
+
+    sparse_keys = {
+        f"{key}_data",
+        f"{key}_indices",
+        f"{key}_indptr",
+        f"{key}_shape",
+    }
+
+    if sparse_keys.issubset(set(data.keys())):
+        sparse = csr_matrix(
+            (
+                data[f"{key}_data"],
+                data[f"{key}_indices"],
+                data[f"{key}_indptr"],
+            ),
+            shape=tuple(data[f"{key}_shape"]),
+        )
+        return sparse.toarray()
+
+    raise KeyError(
+        f"Cannot find map '{key}' in label npz. "
+        f"Available keys: {list(data.keys())}"
     )
-    return sparse.toarray()
 
 
 def load_label_pair(labels_zip: Path, label_name: str) -> tuple[np.ndarray, np.ndarray]:
     data = read_npz_from_zip(labels_zip, label_name)
 
-    inst_map = sparse_from_npz_dict(data, "inst_map").astype(np.int32)
-    type_map = sparse_from_npz_dict(data, "type_map").astype(np.int32)
+    inst_map = array_from_npz_dict(data, "inst_map").astype(np.int32)
+    type_map = array_from_npz_dict(data, "type_map").astype(np.int32)
+
+    if inst_map.shape != type_map.shape:
+        raise ValueError(
+            f"inst_map and type_map have different shapes: "
+            f"{inst_map.shape} vs {type_map.shape}"
+        )
 
     return inst_map, type_map
 
@@ -122,7 +252,12 @@ def choose_patch(
     return df.iloc[index]
 
 
-def summarize_patch(row: pd.Series, inst_map: np.ndarray, type_map: np.ndarray) -> None:
+def summarize_patch(
+    row: pd.Series,
+    inst_map: np.ndarray,
+    type_map: np.ndarray,
+    class_names: dict[int, str],
+) -> None:
     print("===== PATCH INFO =====")
     for col in [
         "slide_id",
@@ -146,10 +281,10 @@ def summarize_patch(row: pd.Series, inst_map: np.ndarray, type_map: np.ndarray) 
     print("\nPixel-level type counts:")
     vals, counts = np.unique(type_map, return_counts=True)
     for v, c in zip(vals, counts):
-        print(f"  {int(v)} = {CLASS_NAMES.get(int(v), 'Unknown')}: {int(c)} pixels")
+        print(f"  {int(v)} = {class_names.get(int(v), 'Unknown')}: {int(c)} pixels")
 
     print("\nInstance-level majority type counts:")
-    instance_counts = {name: 0 for name in CLASS_NAMES.values() if name != "Background"}
+    instance_counts = {name: 0 for name in class_names.values() if name != "Background"}
 
     for cell_id in ids:
         vals_cell = type_map[inst_map == cell_id]
@@ -160,7 +295,7 @@ def summarize_patch(row: pd.Series, inst_map: np.ndarray, type_map: np.ndarray) 
 
         uniq, cnt = np.unique(vals_cell, return_counts=True)
         cls = int(uniq[np.argmax(cnt)])
-        name = CLASS_NAMES.get(cls, "Unknown")
+        name = class_names.get(cls, "Unknown")
 
         if name != "Background":
             instance_counts[name] = instance_counts.get(name, 0) + 1
@@ -169,16 +304,23 @@ def summarize_patch(row: pd.Series, inst_map: np.ndarray, type_map: np.ndarray) 
         print(f"  {name}: {count}")
 
 
-def make_overlay(rgb: np.ndarray, inst_map: np.ndarray, type_map: np.ndarray, alpha: float) -> np.ndarray:
+def make_overlay(
+    rgb: np.ndarray,
+    inst_map: np.ndarray,
+    type_map: np.ndarray,
+    class_names: dict[int, str],
+    alpha: float,
+) -> np.ndarray:
     boundary = compute_instance_boundary(inst_map)
 
-    cmap = plt.get_cmap("tab10", len(CLASS_NAMES))
-    lut = (cmap(np.arange(len(CLASS_NAMES)))[:, :3] * 255).astype(np.uint8)
+    num_classes = max(class_names.keys()) + 1
+    cmap = plt.get_cmap("tab10", num_classes)
+    lut = (cmap(np.arange(num_classes))[:, :3] * 255).astype(np.uint8)
 
     overlay = rgb.copy().astype(np.float32)
 
     type_values = type_map[boundary]
-    colors = lut[np.clip(type_values, 0, len(CLASS_NAMES) - 1)]
+    colors = lut[np.clip(type_values, 0, num_classes - 1)]
 
     overlay[boundary] = (1.0 - alpha) * overlay[boundary] + alpha * colors
     return np.clip(overlay, 0, 255).astype(np.uint8)
@@ -189,10 +331,17 @@ def plot_patch(
     inst_map: np.ndarray,
     type_map: np.ndarray,
     row: pd.Series,
+    class_names: dict[int, str],
     alpha: float,
     save_path: Path | None,
 ) -> None:
-    overlay = make_overlay(rgb, inst_map, type_map, alpha=alpha)
+    overlay = make_overlay(
+        rgb=rgb,
+        inst_map=inst_map,
+        type_map=type_map,
+        class_names=class_names,
+        alpha=alpha,
+    )
 
     fig, ax = plt.subplots(1, 3, figsize=(16, 5))
 
@@ -209,11 +358,12 @@ def plot_patch(
     ax[2].axis("off")
 
     present_classes = sorted(int(v) for v in np.unique(type_map) if int(v) != 0)
-    cmap = plt.get_cmap("tab10", len(CLASS_NAMES))
-    lut = cmap(np.arange(len(CLASS_NAMES)))[:, :3]
+    num_classes = max(class_names.keys()) + 1
+    cmap = plt.get_cmap("tab10", num_classes)
+    lut = cmap(np.arange(num_classes))[:, :3]
 
     handles = [
-        mpatches.Patch(color=lut[cls], label=f"{cls}: {CLASS_NAMES.get(cls, 'Unknown')}")
+        mpatches.Patch(color=lut[cls], label=f"{cls}: {class_names.get(cls, 'Unknown')}")
         for cls in present_classes
     ]
 
@@ -225,7 +375,11 @@ def plot_patch(
             borderaxespad=0.0,
         )
 
-    title = str(row.get("packed_file_name", "unknown"))
+    title = (
+        f"{row.get('split', 'unknown split')} | "
+        f"{row.get('slide_id', 'unknown slide')} | "
+        f"{row.get('packed_file_name', row.get('file_name', 'unknown file'))}"
+    )
     fig.suptitle(title, fontsize=10)
 
     plt.tight_layout()
@@ -234,6 +388,7 @@ def plot_patch(
         save_path.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(save_path, dpi=200, bbox_inches="tight")
         print(f"Saved figure to: {save_path}")
+        plt.close(fig)
     else:
         plt.show()
 
@@ -300,6 +455,11 @@ def main() -> None:
         raise FileNotFoundError(f"Missing patch_info_with_split.csv: {patch_info_csv}")
 
     patch_info = pd.read_csv(patch_info_csv)
+    class_names = load_class_names(dataset_root)
+
+    print("Class names:")
+    for cls_id, cls_name in class_names.items():
+        print(f"  {cls_id}: {cls_name}")
 
     row = choose_patch(
         patch_info=patch_info,
@@ -318,7 +478,7 @@ def main() -> None:
     rgb = read_image_from_zip(images_zip, image_name)
     inst_map, type_map = load_label_pair(labels_zip, label_name)
 
-    summarize_patch(row, inst_map, type_map)
+    summarize_patch(row, inst_map, type_map, class_names)
 
     save_path = Path(args.save).expanduser().resolve() if args.save else None
 
@@ -327,6 +487,7 @@ def main() -> None:
         inst_map=inst_map,
         type_map=type_map,
         row=row,
+        class_names=class_names,
         alpha=args.alpha,
         save_path=save_path,
     )
