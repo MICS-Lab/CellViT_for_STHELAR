@@ -39,10 +39,10 @@ if __name__ == "__main__":
     # Parse arguments
     configuration_parser = ExperimentBaseParser()
     configuration = configuration_parser.parse_arguments()
-
-    if configuration["data"]["dataset"].lower() == "pannuke":
+    dataset_name = configuration["data"]["dataset"].lower()
+    if dataset_name in ["pannuke", "sthelar"]:
         experiment_class = ExperimentCellVitPanNuke
-    elif configuration["data"]["dataset"].lower() == "conic":
+    elif dataset_name == "conic":
         experiment_class = ExperimentCellViTCoNic
     # Setup experiment
     if "checkpoint" in configuration:
