@@ -32,11 +32,16 @@ Supported split strategies:
     If >= 2 selected slides are available, use slide.
     If only 1 selected slide is available, use spatial.
 
-Example:
+Example using a YAML configuration:
 
 python preprocessing/sthelar/convert_hf_to_cellvit.py \
-  --sthelar-root /gpfs/workdir/taddeial/workspace/Datasets/STHELAR_20x \
-  --output-root /gpfs/workdir/taddeial/workspace/Datasets/cellvit_ready/sthelar20x_tonsil_auto \
+  --config configs/preprocessing_sthelar.yaml
+
+Example using command-line arguments:
+
+python preprocessing/sthelar/convert_hf_to_cellvit.py \
+  --sthelar-root /path/to/STHELAR_20x \
+  --output-root /path/to/cellvit_ready/sthelar20x_tonsil_auto \
   --tissue tonsil \
   --strategy auto \
   --split-axis x \
@@ -79,14 +84,6 @@ FIVE_CLASS_MAP = {
     "Other": "Other",
 }
 
-CLASS_TO_INT = {
-    "Background": 0,
-    "Immune": 1,
-    "Stromal": 2,
-    "Epithelial": 3,
-    "Other": 4,
-}
-
 NUCLEI_TYPES = {
     "Background": 0,
     "Immune": 1,
@@ -94,9 +91,6 @@ NUCLEI_TYPES = {
     "Epithelial": 3,
     "Other": 4,
 }
-
-COUNT_CLASS_NAMES = ["Immune", "Stromal", "Epithelial", "Other"]
-
 
 # ============================================================
 # Generic helpers
@@ -209,11 +203,6 @@ def make_patch_uid(row: pd.Series) -> str:
 
 def image_to_label_name(image_name: str) -> str:
     return str(Path(image_name).with_suffix(".npz"))
-
-
-def image_to_typemap_name(image_name: str) -> str:
-    return str(Path(image_name).with_suffix(".npy"))
-
 
 def make_patch_key_from_values(slide_id: str, file_name: str) -> tuple[str, str]:
     return (str(slide_id), str(file_name))

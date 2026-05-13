@@ -14,16 +14,16 @@ dataset_root/
 Example:
 
 python preprocessing/sthelar/visualize_patch.py \
-  --dataset-root /gpfs/workdir/taddeial/workspace/Datasets/cellvit_ready/sthelar20x_tonsil_auto_500_bm64 \
+  --dataset-root /path/to/cellvit_ready/sthelar20x_dataset \
   --split train \
   --index 0
 
 Or select a specific packed image name:
 
 python preprocessing/sthelar/visualize_patch.py \
-  --dataset-root /gpfs/workdir/taddeial/workspace/Datasets/cellvit_ready/sthelar20x_tonsil_auto_500_bm64 \
+  --dataset-root /path/to/cellvit_ready/sthelar20x_dataset \
   --image-name tonsil_s0__x123_y456__some_patch.png \
-  --save /gpfs/workdir/taddeial/workspace/CellViT_for_STHELAR/logs/example_overlay.png
+  --save logs/example_overlay.png
 """
 
 from __future__ import annotations

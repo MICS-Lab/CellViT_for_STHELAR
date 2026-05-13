@@ -14,23 +14,25 @@ It checks:
 - join between cell_id_map cell_id_int values and biological labels
 - optional visualization of one raw patch
 
-Example on local T9:
+Example on local storage:
 
-python preprocessing/sthelar/inspect_raw_dataset.py \
-  --sthelar-root /Volumes/T9/Datasets/STHELAR_20x \
+python preprocessing/sthelar/inspect_dataset.py \
+  --sthelar-root /path/to/STHELAR_20x \
   --magnification 20 \
   --slide-id tonsil_s0 \
   --row-index 0 \
-  --save-figure /Volumes/T9/Datasets/raw_tonsil_s0_patch0.png
+  --mode 9class \
+  --save-figure /path/to/raw_tonsil_s0_patch0.png
 
-Example on Ruche:
+Example on a cluster:
 
-python preprocessing/sthelar/inspect_raw_dataset.py \
-  --sthelar-root /gpfs/workdir/taddeial/workspace/Datasets/STHELAR_20x \
+python preprocessing/sthelar/inspect_dataset.py \
+  --sthelar-root /path/to/STHELAR_20x \
   --magnification 20 \
   --slide-id tonsil_s0 \
   --row-index 0 \
-  --save-figure /gpfs/workdir/taddeial/workspace/raw_tonsil_s0_patch0.png
+  --mode 5class \
+  --save-figure /path/to/raw_tonsil_s0_patch0.png
 """
 
 from __future__ import annotations

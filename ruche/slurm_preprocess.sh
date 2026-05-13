@@ -7,72 +7,47 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
-#SBATCH --output=/gpfs/workdir/taddeial/workspace/CellViT_for_STHELAR/logs/%x_%j.out
-#SBATCH --error=/gpfs/workdir/taddeial/workspace/CellViT_for_STHELAR/logs/%x_%j.err
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
 
+# Submit this script from the repository root, because Slurm log paths are relative.
 set -euo pipefail
 
-REPO=/gpfs/workdir/taddeial/workspace/CellViT_for_STHELAR
+# Infer repository root from the location of this script (<repo>/ruche/slurm_preprocess.sh).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-if [ $# -lt 1 ]; then
-  echo "Usage: sbatch $0 <preprocessing_config.yaml>"
+# Default config if no argument is provided.
+CONFIG="${1:-configs/preprocessing_sthelar.yaml}"
+if [[ "$CONFIG" != /* ]]; then
+  CONFIG="$REPO/$CONFIG"
+fi
+if [[ ! -f "$CONFIG" ]]; then
+  echo "ERROR: config file not found: $CONFIG"
   exit 1
 fi
 
-CONFIG="$1"
-
-module purge
-module load miniconda3/25.5.1/none-none
-source activate cellvit39
-
-mkdir -p "$REPO/logs"
+# Environment.
+# Override from command line if needed, e.g.
+# sbatch --export=ALL,CONDA_ENV=myenv ruche/slurm_preprocess.sh configs/preprocessing_sthelar.yaml
+MODULE_NAME="${MODULE_NAME:-miniconda3/25.5.1/none-none}"
+CONDA_ENV="${CONDA_ENV:-cellvit39}"
 
 cd "$REPO"
+mkdir -p logs
+module purge
+module load "$MODULE_NAME"
+source activate "$CONDA_ENV"
 
 echo "===== JOB INFO ====="
-echo "Hostname: $(hostname)"
-echo "Date: $(date)"
-echo "pwd: $(pwd)"
-echo "python: $(which python)"
+echo "Host:   $(hostname)"
+echo "Date:   $(date)"
+echo "Repo:   $REPO"
+echo "Config: $CONFIG"
+echo "Python: $(which python)"
 python -V
-echo "CONFIG=$CONFIG"
-ls -lh "$CONFIG"
-
-echo "===== CONFIG HEAD ====="
-head -n 120 "$CONFIG"
-echo "======================="
-
-python - <<PY
-import yaml
-from pathlib import Path
-
-p = Path("$CONFIG")
-print("YAML exists:", p.exists())
-cfg = yaml.safe_load(open(p))
-print("output_root:", cfg.get("output_root"))
-print("label_mode:", cfg.get("label_mode"))
-print("label_column:", cfg.get("label_column"))
-print("ignore_labels:", cfg.get("ignore_labels"))
-print("nuclei_types:", cfg.get("nuclei_types"))
-print("n_slide_ids:", len(cfg.get("slide_ids", [])))
-PY
+echo "===================="
 
 echo "===== START PREPROCESSING ====="
 python preprocessing/sthelar/convert_hf_to_cellvit.py --config "$CONFIG"
 echo "===== PREPROCESSING DONE ====="
-
-echo "===== OUTPUT CHECK ====="
-OUT=$(python - <<PY
-import yaml
-cfg = yaml.safe_load(open("$CONFIG"))
-print(cfg["output_root"])
-PY
-)
-
-ls -lh "$OUT"
-wc -l "$OUT"/cell_count_*.csv
-echo "--- dataset_config.yaml ---"
-cat "$OUT/dataset_config.yaml"
-echo "--- split_manifest.yaml ---"
-cat "$OUT/split_manifest.yaml"
-echo "========================"
