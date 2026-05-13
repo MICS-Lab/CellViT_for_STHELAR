@@ -1,0 +1,118 @@
+# -------------------------------------------------------------------------
+# STHELAR -> CellViT preprocessing configuration
+# -------------------------------------------------------------------------
+# Edit this file to define the STHELAR source dataset, output directory,
+# split strategy, and label mapping used to create a CellViT-ready dataset.
+#
+# Example usage:
+#   sbatch ruche/slurm_preprocess.sh configs/preprocessing_sthelar.yaml
+# -------------------------------------------------------------------------
+
+# Root directory of the STHELAR Hugging Face dataset.
+# Expected structure:
+#   STHELAR_20x/
+#   ├── patches_overview_sthelar20x.parquet
+#   ├── data/
+#   └── cell_metadata/
+sthelar_root: /path/to/STHELAR_20x
+
+# Output directory where the CellViT-ready dataset will be written.
+# The converter will create:
+#   images.zip
+#   labels.zip
+#   types.csv
+#   cell_count_train.csv
+#   cell_count_valid.csv
+#   cell_count_test.csv
+#   dataset_config.yaml
+#   patch_info_with_split.csv
+#   split_manifest.yaml
+output_root: /path/to/cellvit_ready/sthelar20x_dataset
+
+# Name of the tissue/domain written to types.csv and dataset_config.yaml.
+# For multi-tissue experiments, a single synthetic tissue name can be used.
+tissue_name: MultiTissue
+
+# Select either:
+#   tissue: tonsil
+# or:
+#   slide_ids: [...]
+#
+# If slide_ids is provided, it takes priority over tissue.
+tissue: null
+
+slide_ids:
+  - tonsil_s0
+  - tonsil_s1
+
+# Split strategy:
+#   baseline = random patch-level split
+#   spatial  = spatial split inside each selected slide
+#   slide    = slide-level split
+#   auto     = slide if >=2 slides, spatial if only 1 slide
+strategy: auto
+
+# Spatial split settings.
+split_axis: x
+boundary_margin: 64
+
+# Fractions for baseline/spatial split and for slide-level allocation.
+train_frac: 0.70
+valid_frac: 0.15
+test_frac: 0.15
+
+# Used when validation is carved spatially from train slide(s).
+train_frac_inside_train_slide: 0.85
+valid_frac_inside_train_slide: 0.15
+
+# Optional caps for debugging or controlled experiments.
+# Use null for no cap.
+max_patches_per_slide: 500
+max_per_split: null
+
+random_seed: 42
+overwrite: true
+keep_tmp: false
+
+# -------------------------------------------------------------------------
+# Label configuration
+# -------------------------------------------------------------------------
+
+# Descriptive name saved in split_manifest.yaml.
+label_mode: 5class
+
+# Metadata column used as source label.
+# Common options:
+#   cells_final_label_group, for 9 or 5 class classification
+#   cells_label3, for cancer vs non-cancer vs background
+label_column: cells_final_label_group
+
+# Raw labels to remove from both instance and type supervision.
+# Example for cancer/normal:
+#   ignore_labels:
+#     - less10
+ignore_labels: null
+
+# Target CellViT nuclei classes.
+# Background must be 0.
+nuclei_types:
+  Background: 0
+  Immune: 1
+  Stromal: 2
+  Epithelial: 3
+  Other: 4
+
+# Mapping from raw STHELAR labels to target classes.
+label_mapping:
+  T_NK: Immune
+  B_Plasma: Immune
+  Myeloid: Immune
+  Blood_vessel: Stromal
+  Fibroblast_Myofibroblast: Stromal
+  Epithelial: Epithelial
+  Melanocyte: Other
+  Specialized: Other
+  Other: Other
+
+# Class used for missing or unmapped raw labels.
+fallback_class: Other
