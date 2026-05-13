@@ -17,6 +17,7 @@ logs/
 *.pt
 *.ckpt
 *.safetensors
+*.patch
 
 # Python cache
 __pycache__/

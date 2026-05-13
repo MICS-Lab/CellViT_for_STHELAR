@@ -1,0 +1,95 @@
+adapters:
+  adapter_type: all
+
+logging:
+  mode: "offline"
+  project: "sthelar20x_multitissue"
+  notes: "CellViT-SAM-H x20 fine-tuning on STHELAR 20x multi-tissue scan-level split with raw 9-class STHELAR labels"
+  log_comment: "sthelar20x_multitissue_scan_9class_pretrained_e1"
+  tags:
+    - "sthelar"
+    - "20x"
+    - "multi_tissue"
+    - "scan_level"
+    - "9class"
+    - "pretrained"
+    - "e1"
+  wandb_dir: "run/sthelar20x_multitissue_scan_9class_pretrained_e1/wandb"
+  log_dir: "run/sthelar20x_multitissue_scan_9class_pretrained_e1/log"
+  level: "debug"
+  log_images: False
+
+random_seed: 19
+
+gpu: 0
+
+data:
+  dataset: "PanNuke"
+  dataset_path: "/gpfs/workdir/taddeial/workspace/Datasets/cellvit_ready/sthelar20x_multitissue_scan_9class"
+  train_folds: ["train"]
+  val_folds: ["valid"]
+  test_folds: ["test"]
+  num_nuclei_classes: 10
+  num_tissue_classes: 1
+  input_shape: 256
+
+model:
+  backbone: "SAM-H"
+  pretrained_encoder: null
+  pretrained: "models/pretrained/CellViT-SAM-H-x20.pth"
+  embed_dim: 1280
+  input_channels: 3
+  depth: 32
+  num_heads: 16
+  extract_layers: 4
+  shared_decoders: False
+
+training:
+  batch_size: 4
+  epochs: 1
+  unfreeze_epoch: 2
+  optimizer: "AdamW"
+  optimizer_hyperparameter:
+    lr: 0.0001
+    betas: [0.85, 0.85]
+  early_stopping_patience: 10
+  scheduler:
+    scheduler_type: "exponential"
+  sampling_strategy: "cell"
+  sampling_gamma: 0.85
+  mixed_precision: True
+  eval_every: 1
+
+transformations:
+  randomrotate90:
+    p: 0.5
+  horizontalflip:
+    p: 0.5
+  verticalflip:
+    p: 0.5
+  downscale:
+    p: 0.5
+    scale: 0.2
+  blur:
+    p: 0.5
+    blur_limit: 10
+  gaussnoise:
+    p: 0.5
+    var_limit: 10
+  colorjitter:
+    p: 0.5
+    scale_setting: 0.25
+    scale_color: 0.1
+  superpixels:
+    p: 0.5
+  zoomblur:
+    p: 0.5
+  randomsizedcrop:
+    p: 0.5
+  elastictransform:
+    p: 0.5
+  normalize:
+    mean: [0.5, 0.5, 0.5]
+    std: [0.5, 0.5, 0.5]
+
+eval_checkpoint: "latest_checkpoint.pth"
