@@ -371,16 +371,16 @@ def apply_max_patches_per_slide(
     return out
 
 
-def load_slide_meta(sthelar_root: Path, slide_id: str) -> pd.DataFrame:
+def load_slide_meta(sthelar_root: Path, slide_id: str, label_column: str) -> pd.DataFrame:
     path = sthelar_root / "cell_metadata" / f"{slide_id}_cell_metadata.parquet"
 
     if not path.exists():
         raise FileNotFoundError(f"Missing slide metadata parquet: {path}")
 
-    requested_cols = ["cell_id_int", "cell_id", "cells_final_label_group"]
+    requested_cols = ["cell_id_int", "cell_id", label_column]
     meta = read_parquet_columns(path, requested_cols)
 
-    required = ["cell_id_int", "cells_final_label_group"]
+    required = ["cell_id_int", label_column]
     missing = [c for c in required if c not in meta.columns]
     if missing:
         raise ValueError(f"Slide metadata {path} is missing required columns: {missing}")
@@ -450,6 +450,7 @@ def map_label_to_target_class(
 def build_type_map(
     cell_id_map: np.ndarray,
     slide_meta: pd.DataFrame,
+    label_column: str,
     label_mapping: dict[str, str],
     class_to_int: dict[str, int],
     fallback_class: str = "Other",
@@ -472,7 +473,7 @@ def build_type_map(
     ids_all, inv = np.unique(cell_id_map, return_inverse=True)
 
     labels_for_ids = (
-        slide_meta["cells_final_label_group"]
+        slide_meta[label_column]
         .reindex(ids_all)
         .to_numpy()
     )
@@ -498,6 +499,35 @@ def build_type_map(
     type_map = lut[inv].reshape(cell_id_map.shape)
     return type_map
 
+def remove_ignored_instances(
+    cell_id_map: np.ndarray,
+    slide_meta: pd.DataFrame,
+    label_column: str,
+    ignore_labels: Optional[list[str]],
+) -> np.ndarray:
+    """
+    Remove instances whose metadata label is in ignore_labels.
+
+    Those cells are excluded from both detection and type supervision by
+    setting their pixels to 0 in the instance map.
+    """
+    if not ignore_labels:
+        return cell_id_map
+
+    ignore_labels = set(str(x) for x in ignore_labels)
+
+    ids_all = np.unique(cell_id_map)
+    ids_all = ids_all[ids_all != 0]
+
+    labels_for_ids = slide_meta[label_column].reindex(ids_all).astype("object")
+    ignored_ids = labels_for_ids[labels_for_ids.isin(ignore_labels)].index.to_numpy()
+
+    if len(ignored_ids) == 0:
+        return cell_id_map
+
+    cleaned = cell_id_map.copy()
+    cleaned[np.isin(cleaned, ignored_ids)] = 0
+    return cleaned
 
 def save_sparse_pair_npz(out_path: Path, inst_map: np.ndarray, type_map: np.ndarray) -> None:
     inst_sparse = csr_matrix(inst_map.astype(np.int32))
@@ -1156,7 +1186,7 @@ def convert(args: argparse.Namespace) -> None:
     )
 
     slide_meta_by_id = {
-        slide_id: load_slide_meta(sthelar_root, slide_id)
+        slide_id: load_slide_meta(sthelar_root, slide_id, args.label_column)
         for slide_id in sorted(patch_info["slide_id"].unique().tolist())
     }
 
@@ -1186,9 +1216,16 @@ def convert(args: argparse.Namespace) -> None:
         cell_id_map = decode_cell_id_map(cell_id_map_bytes)
 
         slide_meta = slide_meta_by_id[slide_id]
+        cell_id_map = remove_ignored_instances(
+            cell_id_map=cell_id_map,
+            slide_meta=slide_meta,
+            label_column=args.label_column,
+            ignore_labels=args.ignore_labels,
+        )
         type_map = build_type_map(
             cell_id_map=cell_id_map,
             slide_meta=slide_meta,
+            label_column=args.label_column,
             label_mapping=label_mapping,
             class_to_int=class_to_int,
             fallback_class=fallback_class,
@@ -1288,6 +1325,9 @@ def convert(args: argparse.Namespace) -> None:
         "max_patches_per_slide": args.max_patches_per_slide,
         "max_per_split": args.max_per_split,
         "random_seed": args.random_seed,
+        "label_column": args.label_column,
+        "label_mode": args.label_mode,
+        "ignore_labels": args.ignore_labels,
         "counts_after_split": {
             "train": int((patch_info["split"] == "train").sum()),
             "valid": int((patch_info["split"] == "valid").sum()),
@@ -1507,6 +1547,18 @@ def build_parser(defaults: dict[str, Any]) -> argparse.ArgumentParser:
         type=dict,
         default=defaults.get("label_mapping"),
         help="Raw STHELAR label to target class mapping. Usually provided via YAML config.",
+    )
+    parser.add_argument(
+        "--label-column",
+        type=str,
+        default=defaults.get("label_column", "cells_final_label_group"),
+        help="Column in cell_metadata used as target label, e.g. cells_final_label_group or cells_label3.",
+    )
+    parser.add_argument(
+        "--ignore-labels",
+        nargs="*",
+        default=defaults.get("ignore_labels"),
+        help="Raw labels to exclude from both instance and type supervision, e.g. less10.",
     )
 
     return parser
