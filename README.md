@@ -1,4 +1,4 @@
-# CellViT for STHELAR
+# Fine-Tuning the CellViT Model with STHELAR, a Xenium-Based Spatial Transcriptomics Dataset
 
 <p align="center">
   <img src="docs/figures/cellvit_sthelar.png" alt="CellViT-STHELAR workflow" width="850">
