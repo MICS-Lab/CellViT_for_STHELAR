@@ -2,6 +2,7 @@
 
 import os
 import zipfile
+import sys
 from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
@@ -35,38 +36,28 @@ def zip_folder(folder_path: Path, output_path: Path):
                 pbar.update(1)
 
 
-def create_zips_imgs_labels(dataset_path: Path, macenko: bool):
-    """Create zips for images and labels folders.
+def create_zip_imgs_or_id(dataset_path: Path, slide_ids: list, done_path: Path, name_zip: str, overwrite_zip: bool = False):
+    """Create zip for images or masks_cell_ids_nuclei for a given list of slide_ids"""
 
-    Args:
-        dataset_path (Path): Path to the dataset folders
-    """
-
-    images_folder = dataset_path / "images_macenko" if macenko else dataset_path / "images"
-    labels_folder = dataset_path / "labels"
-    masks_cell_ids_nuclei_folder = dataset_path / "masks_cell_ids_nuclei"
-
-    images_zip_path = dataset_path / "images_macenko.zip" if macenko else dataset_path / "images.zip"
-    labels_zip_path = dataset_path / "labels.zip"
-    masks_zip_path = dataset_path / "masks_cell_ids_nuclei.zip"
-
-    if images_folder.exists():
-        zip_folder(images_folder, images_zip_path)
-        print(f"Zipped images into {images_zip_path}")
-    else:
-        print(f"Images folder not found")
-
-    if labels_folder.exists():
-        zip_folder(labels_folder, labels_zip_path)
-        print(f"Zipped labels into {labels_zip_path}")
-    else:
-        print(f"Labels folder not found")
+    print(f"List of slides: {slide_ids}\n")
+    output_zip_path = dataset_path / name_zip
     
-    if masks_cell_ids_nuclei_folder.exists():
-        zip_folder(masks_cell_ids_nuclei_folder, masks_zip_path)
-        print(f"Zipped masks into {masks_zip_path}")
-    else:
-        print(f"Masks folder not found")
+    if output_zip_path.exists():
+        print(f"\nWARNING: The output file '{output_zip_path}' already exists.")
+        
+        if overwrite_zip or not sys.stdin.isatty():
+            print("Forcing overwrite/fresh recreation as requested or running in non-interactive shell.\n")
+            output_zip_path.unlink()
+        else:
+            action = input("Do you want to (D)elete and recreate it, (A)ppend to it, or (C)ancel the operation? [D/A/C]: ").strip().upper()
+            if action == 'D':
+                print("Deleting the existing file and starting fresh.\n")
+                output_zip_path.unlink()
+            elif action == 'A':
+                print("Appending new slide IDs to the existing file.\n")
+            else:
+                print("Operation canceled by the user.")
+                return
 
 
 
@@ -243,43 +234,68 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process and zip datasets.")
 
-    ## !!!! CHOOSE !!!!
-    parser.add_argument("--step", type=str, choices=['convert_only', 'zip_images_training', 'zip_masks_cell_ids_nuclei_training', 'prepare_cell_cat_id'], default="convert_only", help='Step to perform')
+    parser.add_argument(
+        "--step", 
+        type=str, 
+        choices=['convert_only', 'zip_images_training', 'zip_masks_cell_ids_nuclei_training', 'prepare_cell_cat_id'], 
+        default="convert_only", 
+        help='Step to perform'
+    )
     
-    # If convert_only :
-        # => only take the images and labels folders and convert them into zip files in the same input folder
-        # dataset_path = "/Volumes/DD_FGS/MICS/data_HE2CellType/CT_DS/check_align_patches/apply_cellvit/prepared_patches_xenium/heart_s0"
-    
-    # If zip_images_training :
-        # => take the images for each slide_id and group everything into a zip file that we can use for all the different training (images from all the slides)
-        # dataset_path = "/Volumes/DD_FGS/MICS/data_HE2CellType/HE2CT/prepared_datasets_cat"
-    
-    # If zip_masks_cell_ids_nuclei_training :
-        # => take the masks_cell_ids_nuclei for each slide_id and group everything into a zip file that we can use for all the different training (masks_cell_ids_nuclei from all the slides)
-        # dataset_path = "/Volumes/DD_FGS/MICS/data_HE2CellType/HE2CT/prepared_datasets_cat"
-    
-    # If prepare_cell_cat_id :
-        # => only for a given cell_cat_id: group all the labels from all the slides for the given cell_cat_id into a final zip and update the cell_count, types and patch metrics CSVs
-        # dataset_path = "/Volumes/DD_FGS/MICS/data_HE2CellType/HE2CT/prepared_datasets_cat/ct_1"
-    
-    parser.add_argument("--dataset_path", type=Path, default="/Volumes/DD_FGS/MICS/data_HE2CellType/HE2CT/prepared_datasets_cat", help="Path to the dataset folder.")
+    parser.add_argument(
+        "--dataset_path", 
+        type=Path, 
+        required=True, 
+        help="Path to the active dataset folder (e.g., path/to/prepared_datasets_cat)."
+    )
 
+    parser.add_argument(
+        "--done_images_path", 
+        type=Path, 
+        default=None, 
+        help="Path to folder containing slide_id subdir with images zip."
+    )
 
-    # For zip_images_training:
-    parser.add_argument("--done_images_path", type=Path, default="/Volumes/DD_FGS/MICS/data_HE2CellType/CT_DS/check_align_patches/apply_cellvit/prepared_patches_xenium", help="Path to folder containing slide_id subdir with images zip done during check align")
-
-    # For zip_masks_cell_ids_nuclei_training:
-    parser.add_argument("--done_masks_cell_ids_nuclei_path", type=Path, default="/Volumes/DD_FGS/MICS/data_HE2CellType/CT_DS/check_align_patches/apply_cellvit/prepared_patches_xenium", help="Path to folder containing slide_id subdir with masks_cell_ids_nuclei zip done during check align")
+    parser.add_argument(
+        "--done_masks_cell_ids_nuclei_path", 
+        type=Path, 
+        default=None, 
+        help="Path to folder containing slide_id subdir with masks_cell_ids_nuclei zip."
+    )
     
-    # For zip_images_training and zip_masks_cell_ids_nuclei_training:
-    parser.add_argument("--slide_ids", type=str, nargs='+', default=["heart_s0"], help="List of slide_ids to add in the global images zip")
+    parser.add_argument(
+        "--slide_ids", 
+        type=str, 
+        nargs='+', 
+        default=[], 
+        help="List of slide_ids to add in the global images zip (e.g., heart_s0)."
+    )
 
-    # For prepare_cell_cat_id:
-    parser.add_argument("--patch_metrics_path", type=Path, default="/Volumes/DD_FGS/MICS/data_HE2CellType/CT_DS/ds_slides_cat/ct_1", help="Path to folder containing slide_id subdir with patch_metrics.csv file.")
+    parser.add_argument(
+        "--patch_metrics_path", 
+        type=Path, 
+        default=None, 
+        help="Path to folder containing slide_id subdir with patch_metrics.csv file."
+    )
 
-    # For convert_only and zip_images_training:
-    parser.add_argument("--macenko", action="store_true", help="Using folder with images after Macenko normalization instead of original images")
+    parser.add_argument(
+        "--macenko", 
+        action="store_true", 
+        help="Using folder with images after Macenko normalization instead of original images"
+    )
+    parser.add_argument(
+    "--overwrite_zip", 
+    action="store_true", 
+    help="Force overwrite of existing zip output without asking input confirmation."
+    )
 
     args = parser.parse_args()
+
+    if args.step == "zip_images_training" and not args.done_images_path:
+        parser.error("--done_images_path is required when --step is 'zip_images_training'")
+    if args.step == "zip_masks_cell_ids_nuclei_training" and not args.done_masks_cell_ids_nuclei_path:
+        parser.error("--done_masks_cell_ids_nuclei_path is required when --step is 'zip_masks_cell_ids_nuclei_training'")
+    if args.step == "prepare_cell_cat_id" and not args.patch_metrics_path:
+        parser.error("--patch_metrics_path is required when --step is 'prepare_cell_cat_id'")
 
     main(args)
