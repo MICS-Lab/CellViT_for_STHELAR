@@ -13,9 +13,8 @@
 # Submit this script from the repository root, because Slurm log paths are relative.
 set -euo pipefail
 
-# Infer repository root from the location of this script (<repo>/ruche/slurm_train.sh).
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
+# Launch from repository root
+REPO="${SLURM_SUBMIT_DIR:-$(pwd)}""
 
 # Default config if no argument is provided.
 CONFIG="${1:-configs/training_sthelar.yaml}"
