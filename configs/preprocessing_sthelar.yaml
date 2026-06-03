@@ -97,21 +97,26 @@ ignore_labels: null
 # Background must be 0.
 nuclei_types:
   Background: 0
-  Immune: 1
-  Stromal: 2
-  Epithelial: 3
-  Other: 4
+  Epithelial: 1
+  Blood_vessel: 2
+  Fibroblast_Myofibroblast: 3
+  Myeloid: 4
+  B_Plasma: 5
+  T_NK: 6
+  Melanocyte: 7
+  Specialized: 8
+  Other: 9
 
 # Mapping from raw STHELAR labels to target classes.
 label_mapping:
-  T_NK: Immune
-  B_Plasma: Immune
-  Myeloid: Immune
-  Blood_vessel: Stromal
-  Fibroblast_Myofibroblast: Stromal
   Epithelial: Epithelial
-  Melanocyte: Other
-  Specialized: Other
+  Blood_vessel: Blood_vessel
+  Fibroblast_Myofibroblast: Fibroblast_Myofibroblast
+  Myeloid: Myeloid
+  B_Plasma: B_Plasma
+  T_NK: T_NK
+  Melanocyte: Melanocyte
+  Specialized: Specialized
   Other: Other
 
 # Class used for missing or unmapped raw labels.
